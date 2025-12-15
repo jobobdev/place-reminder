@@ -37,7 +37,7 @@ function App() {
    * ===================================================== */
 
   // 이미 알림을 보낸 장소 ID 목록 (중복 알림 방지용)
-  const [notifiedPlaces, setNotifiedPlaces] = useState([]);
+  const [, setNotifiedPlaces] = useState([]);
 
   // DB에 저장된 모든 장소 리스트
   const [savedPlaces, setSavedPlaces] = useState([]);
@@ -103,7 +103,6 @@ function App() {
   useProximityAlert({
     currentPosition,
     savedPlaces,
-    notifiedPlaces,
     setNotifiedPlaces,
     radius: 100, // meters
   });

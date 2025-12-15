@@ -16,7 +16,6 @@ import { showNotification } from "../utils/notification";
 export default function useProximityAlert({
   currentPosition,
   savedPlaces,
-  notifiedPlaces,
   setNotifiedPlaces,
   radius = 100,
 }) {
@@ -24,7 +23,6 @@ export default function useProximityAlert({
     if (!currentPosition || savedPlaces.length === 0) return;
 
     savedPlaces.forEach((place) => {
-      // place.position = { lat, lng } 라는 전제
       const dist = getDistanceFromLatLonInM(
         currentPosition.lat,
         currentPosition.lng,
@@ -32,14 +30,19 @@ export default function useProximityAlert({
         place.position.lng
       );
 
-      if (dist < radius && !notifiedPlaces.includes(place._id)) {
-        showNotification(
-          `📍 저장된 장소 ${place.name} 근처입니다!`,
-          `${dist.toFixed(1)}m 남음`
-        );
+      if (dist < radius) {
+        setNotifiedPlaces((prev) => {
+          // 이미 알림을 보낸 장소면 아무 것도 하지 않음
+          if (prev.includes(place._id)) return prev;
 
-        setNotifiedPlaces((prev) => [...prev, place._id]);
+          showNotification(
+            `📍 저장된 장소 ${place.name} 근처입니다!`,
+            `${dist.toFixed(1)}m 남음`
+          );
+
+          return [...prev, place._id];
+        });
       }
     });
-  }, [currentPosition, savedPlaces]); // eslint 경고를 줄이려면 나중에 notifiedPlaces도 포함 가능
+  }, [currentPosition, savedPlaces, radius, setNotifiedPlaces]);
 }
