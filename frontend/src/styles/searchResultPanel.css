@@ -1,0 +1,73 @@
+/* =========================
+   공통: 전체 배경
+========================= */
+.search-result-panel {
+  position: fixed;
+  inset: 0;
+  background: #fff;
+  z-index: 25;
+  overflow: hidden;
+}
+
+/* =========================
+   모바일
+========================= */
+.search-result-panel.is-mobile {
+  position: fixed;
+
+  /* ✅ 헤더 높이(패딩 포함)만큼 아래에서 시작 */
+  top: 64px;
+
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30; /* 헤더(40)보다 낮게 */
+  background: #fff;
+  overflow-y: auto;
+}
+
+/* =========================
+   데스크탑
+========================= */
+.search-result-panel.is-desktop {
+  background: transparent; /* 데스크탑은 full overlay X */
+  pointer-events: none;
+}
+
+/* =========================
+   실제 콘텐츠 영역
+========================= */
+.search-result-content {
+  height: 100%;
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+/* =========================
+   결과 아이템
+========================= */
+.search-result-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+}
+
+.search-result-item:hover {
+  background: #f9f9f9;
+}
+
+.search-result-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111;
+}
+
+.search-result-address {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.load-more-sentinel {
+  height: 1px;
+}

@@ -20,6 +20,10 @@ export default function MapContainer({
         clickableIcons: true, // 🔥 POI 클릭 이벤트 허용
         gestureHandling: "greedy", // 클릭 우선
         disableDoubleClickZoom: true,
+        // 🔥 기본 지도 UI 제거
+        mapTypeControl: false, // 지도 / 위성 ❌
+        fullscreenControl: false, // 전체화면 ❌
+        streetViewControl: false, // 스트리트뷰 ❌
       }}
     >
       {currentLocation && <Marker position={currentLocation} />}

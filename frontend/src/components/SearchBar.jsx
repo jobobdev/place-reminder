@@ -2,15 +2,15 @@
 /*SearchBar.jsx
 ├─ useRef
 │  ├─ sessionTokenRef
-│  └─ autocompleteServiceRef   ✅ 유일
+│  └─ placesServiceRef
 │
 ├─ handleInput
 │  ├─ Google API 체크 (1번만)
-│  ├─ AutocompleteService 생성 (1회)
-│  ├─ SessionToken 생성 (검색 시작 시)
-│  └─ getPlacePredictions 호출
+│  ├─ PlacesService 생성 (1회)
+│  ├─ Text Search 요청
+│  └─ 콘솔 출력
 │
-├─ enrichWithDistance (그대로 사용)
+├─ enrichWithDistance (그대로 보존)
 │
 └─ render
    ├─ input
@@ -18,14 +18,14 @@
    └─ 더보기 버튼 */
 // --------------------------------------------------
 // 역할:
-// - Google Places Autocomplete를 이용한 장소 검색
-// - 검색 결과를 "현재 위치 기준 거리순"으로 정렬
+// - Google Places Text Search를 이용한 장소 검색
+// - 검색 결과를 "현재 위치 기준 거리순"으로 정렬 (기존 로직 보존)
 // - 사용자가 결과를 클릭하면 부모(App)에 선택 이벤트 전달
 // --------------------------------------------------
 
 import { useState, useRef } from "react";
 import { getDistanceFromLatLonInM } from "../utils/distance";
-
+import SearchResultPanel from "../components/SearchResultPanel";
 /*
   💡 이 컴포넌트는 "검색 UX"만 책임진다.
   - 지도 이동 ❌
@@ -39,8 +39,8 @@ function SearchBar({ onPlaceSelect, currentPosition }) {
   // ==================================================
   // Autocomplete 세션 토큰 (렌더링 간 유지)
   const sessionTokenRef = useRef(null);
-  // AutocompleteService 인스턴스 (렌더링 간 유지)
-  const autocompleteServiceRef = useRef(null);
+  // PlacesService 인스턴스 (렌더링 간 유지)
+  const placesServiceRef = useRef(null);
 
   // 사용자가 입력한 검색어
   const [query, setQuery] = useState("");
@@ -75,6 +75,7 @@ function SearchBar({ onPlaceSelect, currentPosition }) {
     3) 현재 위치와 거리 계산
     4) distance 기준 정렬
   */
+
   const enrichWithDistance = async (predictions) => {
     // 현재 위치가 없으면 정렬 없이 그대로 반환
     if (!currentPosition) return predictions;
@@ -138,145 +139,146 @@ function SearchBar({ onPlaceSelect, currentPosition }) {
   // ==================================================
   // 4️⃣ 검색 입력 핸들러
   // ==================================================
-  const handleInput = async (e) => {
+  const handleInput = (e) => {
     console.log("⌨️ input fired", e.target.value);
-    console.log("google:", window.google);
-    console.log("maps:", window.google?.maps);
-    console.log("places:", window.google?.maps?.places);
 
-    // 1️⃣ Google Maps API 준비 여부 확인 (단 한 번만)
+    // ===============================
+    // 🔹 A. 입력값 먼저 처리
+    // ===============================
+    const value = e.target.value;
+    setQuery(value);
+
+    // 🔥 [수정 ①] 검색 종료 조건 (여기가 핵심)
+    // - 검색어가 지워지면
+    // - 즉시 검색 상태 종료 + 결과 제거
+    if (value.length < 2) {
+      setResults([]); // 결과 패널 제거
+      return; // ❗ 여기서 함수 종료
+    }
+
+    // ===============================
+    // 🔹 B. Google API 준비 체크
+    // ===============================
     if (!window.google?.maps?.places) {
       console.warn("Google Maps API not ready yet");
       return;
     }
 
-    // 2️⃣ AutocompleteService 최초 1회 생성
-    if (!autocompleteServiceRef.current) {
-      autocompleteServiceRef.current =
-        new window.google.maps.places.AutocompleteService();
+    // ===============================
+    // 🔹 C. PlacesService 최초 1회 생성
+    // ===============================
+    if (!placesServiceRef.current) {
+      placesServiceRef.current = new window.google.maps.places.PlacesService(
+        document.createElement("div")
+      );
     }
 
-    const value = e.target.value;
-    setQuery(value);
+    // text search에서는 sessionToken 사용하지 않음 → ref만 초기화
+    sessionTokenRef.current = null;
 
-    // 3️⃣ 입력이 너무 짧으면 결과 초기화
-    if (value.length < 2) {
-      setResults([]);
-      return;
+    const request = {
+      query: value,
+      radius: 5000,
+    };
+
+    if (currentPosition) {
+      request.location = new window.google.maps.LatLng(
+        currentPosition.lat,
+        currentPosition.lng
+      );
     }
 
-    // 4️⃣ 새 검색 시작 시 SessionToken 생성
-    if (!sessionTokenRef.current) {
-      sessionTokenRef.current =
-        new window.google.maps.places.AutocompleteSessionToken();
-    }
+    placesServiceRef.current.textSearch(request, async (places, status) => {
+      console.log("🔍 textSearch status:", status);
+      console.log("🔍 textSearch results:", places);
 
-    // 5️⃣ pagination 초기화
-    setVisibleCount(PAGE_SIZE);
-
-    // 6️⃣ Autocomplete 요청
-    autocompleteServiceRef.current.getPlacePredictions(
-      {
-        input: value,
-        sessionToken: sessionTokenRef.current,
-
-        // 🔥 (1) 현재 위치
-        location: currentPosition
-          ? new window.google.maps.LatLng(
-              currentPosition.lat,
-              currentPosition.lng
-            )
-          : undefined,
-
-        // 🔥 (2) 반경 제한 (미터)
-        radius: 5000, // 5km
-
-        // 🔥 (3) 국가 제한 (한국)
-        componentRestrictions: { country: "kr" },
-      },
-      async (predictions, status) => {
-        console.log("🔍 status:", status);
-        console.log("🔍 predictions:", predictions);
-        if (
-          status === window.google.maps.places.PlacesServiceStatus.OK &&
-          predictions
-        ) {
-          const sortedResults = await enrichWithDistance(predictions);
-          setResults(sortedResults);
-        } else {
-          setResults([]);
-        }
+      if (
+        status !== window.google.maps.places.PlacesServiceStatus.OK ||
+        !places
+      ) {
+        setResults([]);
+        return;
       }
-    );
+
+      // 🔥 핵심 1: 거리 정보 추가 + 정렬
+      const sortedResults = await enrichWithDistance(places);
+
+      // 🔥 핵심 2: 결과 state에 저장
+      setResults(sortedResults);
+
+      // 🔥 핵심 3: pagination 초기화
+      setVisibleCount(PAGE_SIZE);
+    });
   };
+
+  // ==================================================
+  // 🔁 무한스크롤 핸들러
+  // ==================================================
+  const handleReachEnd = () => {
+    // 이미 모든 결과를 보여줬다면 중단
+    if (visibleCount >= results.length) return;
+
+    setVisibleCount((prev) => prev + PAGE_SIZE);
+  };
+  const isSearching = query.length >= 2;
 
   // ==================================================
   // 5️⃣ 렌더링
   // ==================================================
   // Google Maps API가 아직 로드되지 않았으면 아무것도 렌더링하지 않음
-
-  // 🔥 [STEP 3-3] 화면에 보여줄 결과만 잘라서 사용
-  // - results: 전체 검색 결과
-  // - visibleCount: 현재 화면에 보여줄 개수(예: 5개)
-  const visibleResults = results.slice(0, visibleCount);
+  const isMobile = window.innerWidth <= 768;
 
   return (
-    <div style={styles.container}>
-      {/* 검색 입력창 */}
-      <input
-        style={styles.input}
-        value={query}
-        onChange={handleInput}
-        placeholder="장소를 검색하세요"
-      />
-
-      {/* 자동완성 결과 리스트 */}
-      {visibleResults.length > 0 && (
-        <div style={styles.resultBox}>
-          {visibleResults.map((item) => (
-            <div
-              key={item.place_id}
-              style={styles.item}
+    <>
+      {/* =========================================
+        1️⃣ 배경 overlay (input 뒤)
+        - 추가
+        - input과 DOM 분리
+       ========================================= */}
+      {isMobile && isSearching && <div className="search-overlay" />}
+      {/* 2) ✅ 헤더 컨테이너: 검색창 + (검색 중) 불투명 배경 */}
+      <div className={`search-header ${isSearching ? "is-searching" : ""}`}>
+        <div style={styles.container}>
+          {isSearching && (
+            <button
+              style={styles.backButton}
               onClick={() => {
-                /*
-                [검색 결과 클릭 시 동작 흐름]
-
-                  1️⃣ 선택한 장소를 부모(App.jsx)로 전달
-                    → 지도 이동, 모달 오픈은 App에서 처리
-
-                  2️⃣ 자동완성 결과 리스트만 닫기
-                    → query는 유지되므로
-                      input에는 검색어가 그대로 남음
-                */
-                onPlaceSelect(item);
-                setResults([]); // 🔥 리스트 닫기
+                setQuery("");
+                setResults([]);
               }}
+              type="button"
             >
-              {item.description}
-            </div>
-          ))}
-        </div>
-      )}
+              <span className="material-symbols-outlined">chevron_left</span>
+            </button>
+          )}
 
-      {/* 더보기 버튼 */}
-      {results.length > visibleCount && (
-        <div style={styles.moreBox}>
-          <button
-            style={styles.moreButton}
-            onClick={() => {
-              /*
-          [더보기 버튼 동작]
-          - 현재 보여주는 개수 + PAGE_SIZE
-          - 결과가 부족하면 자동으로 끝
-        */
-              setVisibleCount((prev) => prev + PAGE_SIZE);
+          <input
+            style={{
+              ...styles.input,
+              paddingLeft: isSearching ? "40px" : "12px",
             }}
-          >
-            더보기
-          </button>
+            value={query}
+            onChange={handleInput}
+            placeholder="장소를 검색하세요"
+          />
         </div>
+      </div>
+      {/* 3) 결과 패널 */}
+      {isSearching && (
+        <SearchResultPanel
+          results={results}
+          visibleCount={visibleCount}
+          isMobile={isMobile}
+          onReachEnd={handleReachEnd}
+          offsetTop={64} // ✅ (아래 2)에서 이 값과 CSS 높이를 맞춰야 함
+          onSelect={(item) => {
+            onPlaceSelect(item);
+            setResults([]);
+            setQuery("");
+          }}
+        />
       )}
-    </div>
+    </>
   );
 }
 
@@ -285,44 +287,38 @@ function SearchBar({ onPlaceSelect, currentPosition }) {
 // ==================================================
 const styles = {
   container: {
-    position: "absolute",
-    top: "10px",
+    // ✅ [수정] absolute -> fixed
+    position: "fixed",
+    top: "12px",
     left: "50%",
     transform: "translateX(-50%)",
-    width: "80%",
-    zIndex: 10,
+    width: "90%",
+    maxWidth: "420px",
+    zIndex: 30,
   },
   input: {
     width: "100%",
+    boxSizing: "border-box",
     padding: "12px",
     borderRadius: "8px",
     border: "1px solid #ccc",
     fontSize: "16px",
   },
-  resultBox: {
-    marginTop: "4px",
-    background: "white",
-    borderRadius: "8px",
-    boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
-    overflow: "hidden",
-  },
-  item: {
-    padding: "10px",
-    borderBottom: "1px solid #eee",
+  backButton: {
+    position: "absolute",
+    left: "12px",
+    top: "50%",
+    transform: "translateY(-50%)",
+    background: "none",
+    border: "none",
+    padding: 0,
+    margin: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
     cursor: "pointer",
-  },
-  moreBox: {
-    padding: "8px",
-    textAlign: "center",
-    background: "#fafafa",
-  },
-  moreButton: {
-    padding: "6px 12px",
-    borderRadius: "6px",
-    border: "1px solid #ccc",
-    background: "white",
-    cursor: "pointer",
-    fontSize: "14px",
+    zIndex: 31,
+    color: "#333", // 아이콘 색상
   },
 };
 
