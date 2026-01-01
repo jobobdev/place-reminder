@@ -1,65 +1,68 @@
 // BasicInfoModal.jsx
-// 선택된 장소의 기본 정보를 보여주는 모달 + "내 장소로 저장하기" 버튼
 import { useState } from "react";
 
-function BasicInfoModal({ place, onClose, onSave }) {
-    // 메모는 모달 내부에서만 관리하다가, 저장 시에 함께 전달
-    const [memo, setMemo] = useState("");
+function BasicInfoModal({ place, onClose, onSave, isSaved, onDelete }) {
+  // ✅ Hook은 무조건 최상단
+  const [memo, setMemo] = useState(place?.memo || "");
 
-    if(!place) return null; //장소 정보 없으면 렌더링하지 않음
+  // ✅ place 없으면 여기서 return
+  if (!place) return null;
 
-    const handleSaveClick = () => {
-    // 기존 place 정보 + memo를 합쳐서 onSave로 전달
-        onSave({
-            ...place,
-            memo: memo,
-        });
-    };
+  const handleSaveClick = () => {
+    onSave({
+      ...place,
+      memo,
+    });
+  };
 
-    return (
-        <div style={styles.overlay}> 
-            <div style={styles.modal}>
-                {/* 닫기 버튼 */}
-                <div style={styles.closeBtn} onClick={onClose}>
-                    ×
-                </div>
-
-                <h2 style={{ marginBottom: "10px"}}>{place.name}</h2>
-
-                <p>
-                    <strong>주소:</strong> {place.address}
-                </p>
-                <p>
-                    <strong>평점:</strong> {place.rating ?? "정보 없음"} ⭐ (
-                     {place.reviews ?? 0}명)
-                </p>
-                <p>
-                    <strong>운영 시간:</strong>
-                </p>
-                <ul>
-                    {place.hours.length > 0 ? (
-                        place.hours.map((line, idx) => <li key={idx}>{line}</li>)
-                    ) : (
-                        <li>영업시간 정보 없음</li>
-                    )}
-                </ul>
-
-                {/* 메모 입력란 */}
-                <textarea
-                    style={styles.textarea}
-                     placeholder="메모를 입력하세요 (선택)"
-                     value={memo}
-                     onChange={(e) => setMemo(e.target.value)}
-                />
-                
-                {/* 저장 버튼 */}   
-                <button style={styles.saveBtn} onClick={handleSaveClick}>
-                    내 장소로 저장하기
-                </button>
-            </div>
+  return (
+    <div style={styles.overlay} onClick={onClose}>
+      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.closeBtn} onClick={onClose}>
+          ×
         </div>
-    )
+
+        <h2>{place.name}</h2>
+
+        {isSaved && (
+          <p style={{ color: "#007bff", fontWeight: "bold" }}>📌 저장된 장소</p>
+        )}
+
+        {/* ✅ B안: 운영시간 표시 — 여기 */}
+        {Array.isArray(place.hours) && place.hours.length > 0 && (
+          <>
+            <p style={{ fontWeight: "bold", marginTop: "8px" }}>운영 시간</p>
+            <ul style={{ paddingLeft: "16px", marginTop: "4px" }}>
+              {place.hours.map((line, idx) => (
+                <li key={idx}>{line}</li>
+              ))}
+            </ul>
+          </>
+        )}
+
+        <textarea
+          style={styles.textarea}
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+          placeholder="메모를 입력하세요 (선택)"
+        />
+
+        {!isSaved && (
+          <button style={styles.saveBtn} onClick={handleSaveClick}>
+            내 장소로 저장하기
+          </button>
+        )}
+
+        {isSaved && (
+          <button style={styles.deleteBtn} onClick={() => onDelete(place._id)}>
+            저장 삭제하기
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
+
 const styles = {
   overlay: {
     position: "absolute",
@@ -109,8 +112,17 @@ const styles = {
     fontSize: "16px",
     cursor: "pointer",
   },
+  deleteBtn: {
+    width: "100%",
+    padding: "12px",
+    borderRadius: "8px",
+    border: "none",
+    marginTop: "12px",
+    backgroundColor: "#dc3545",
+    color: "white",
+    fontSize: "16px",
+    cursor: "pointer",
+  },
 };
 
 export default BasicInfoModal;
-
-

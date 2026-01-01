@@ -1,14 +1,26 @@
 // hooks/useMapClick.js
 
-export default function useMapClick(fetchPlaceDetails) {
+export default function useMapClick(
+  fetchPlaceDetails,
+  setSelectedPlace,
+  setSelectedPlaceSource
+) {
   return (e) => {
-    // 🔥 가장 먼저 기본 동작 차단
+    // 🔥 기존 동작 유지
     if (e.stop) {
       e.stop();
     }
 
     // 1️⃣ POI 클릭 (placeId 있음)
     if (e.placeId) {
+      if (typeof setSelectedPlace === "function") {
+        setSelectedPlace(null);
+      }
+
+      if (typeof setSelectedPlaceSource === "function") {
+        setSelectedPlaceSource("map"); // ✅ 핵심
+      }
+
       fetchPlaceDetails(e.placeId);
       return;
     }
@@ -26,6 +38,14 @@ export default function useMapClick(fetchPlaceDetails) {
 
       const placeId = results[0].place_id;
       if (placeId) {
+        if (typeof setSelectedPlace === "function") {
+          setSelectedPlace(null);
+        }
+
+        if (typeof setSelectedPlaceSource === "function") {
+          setSelectedPlaceSource("map"); // ✅ 핵심
+        }
+
         fetchPlaceDetails(placeId);
       }
     });

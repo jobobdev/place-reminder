@@ -1,3 +1,5 @@
+/* place-reminder/backend/routes/placeroutes.js */
+
 // express.Router(): 라우터(= 작은 서버 조각) 생성 도구
 // - Express 앱은 여러 개의 라우터로 기능을 나눌 수 있음
 // - 예: /places 전용 라우터, /users 전용 라우터 등
@@ -15,7 +17,7 @@ router.post("/", async (req, res) => {
     const place = await Place.create(req.body);
     res.status(201).json(place);
   } catch (eroor) {
-    console.error("장소 저장 오류:", err);
+    console.error("장소 저장 오류:", error);
     res.status(500).json({ error: "서버 오류로 장소를 저장할 수 없습니다." });
   }
 });
@@ -30,6 +32,28 @@ router.get("/", async (req, res) => {
   } catch (error) {
     console.error("장소 조회 오류:", error);
     res.status(500).json({ error: "서버 오류로 장소를 불러올 수 없습니다." });
+  }
+});
+// [DELETE] 저장된 장소 삭제
+// DELETE /places/:id
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const deleted = await Place.findByIdAndDelete(id);
+
+    // 존재하지 않는 id면 404
+    if (!deleted) {
+      return res.status(404).json({ error: "해당 장소를 찾을 수 없습니다." });
+    }
+
+    // 성공
+    return res.status(200).json({ message: "삭제 완료", deletedId: id });
+  } catch (error) {
+    console.error("장소 삭제 오류:", error);
+    return res
+      .status(500)
+      .json({ error: "서버 오류로 장소를 삭제할 수 없습니다." });
   }
 });
 
