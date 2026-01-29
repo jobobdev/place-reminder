@@ -1,17 +1,7 @@
+// frontend/src/hooks/useGeolocation.js
 import { useEffect, useState } from "react";
 
-/*
-  ⭐ useGeolocation Hook
-  - 브라우저의 현재 위치(GPS)를 추적하는 기능만 담당
-  - UI는 없음 (오직 데이터 처리만 함)
-  - App.jsx는 이 hook을 호출해서 currentPosition만 받아온다.
-
-  장점:
-  - 위치 추적 로직을 App.jsx에서 제거 → 코드 가벼워짐
-  - 테스트/유지보수 쉬워짐
-*/
-
-export default function useGeolocation(mapInstance) {
+export default function useGeolocation() {
   const [currentPosition, setCurrentPosition] = useState(null);
 
   useEffect(() => {
@@ -22,29 +12,30 @@ export default function useGeolocation(mapInstance) {
 
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        const newPos = {
+        console.log("[useGeolocation] position update", {
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
-        };
-        setCurrentPosition(newPos);
+          heading: pos.coords.heading,
+        });
 
-        // 지도 인스턴스가 있으면 위치 변경 시마다 지도 중심 이동
-        if (mapInstance) {
-          mapInstance.panTo(newPos);
-        }
+        setCurrentPosition({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          heading: pos.coords.heading, // ✅ 추가 (없으면 null일 수 있음)
+        });
       },
-      (err) => console.error("📌 위치 추적 오류", err),
+      (err) => {
+        console.error("Error obtaining location", err);
+      },
       {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 5000,
+        enableHighAccuracy: false,
+        maximumAge: 10000,
+        timeout: 20000,
       }
     );
 
-    // 정리 함수: 컴포넌트 언마운트 시 위치 추적 중지
-
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [mapInstance]);
+  }, []);
 
   return currentPosition;
 }

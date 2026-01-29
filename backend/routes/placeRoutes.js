@@ -16,7 +16,7 @@ router.post("/", async (req, res) => {
   try {
     const place = await Place.create(req.body);
     res.status(201).json(place);
-  } catch (eroor) {
+  } catch (error) {
     console.error("장소 저장 오류:", error);
     res.status(500).json({ error: "서버 오류로 장소를 저장할 수 없습니다." });
   }
@@ -34,6 +34,38 @@ router.get("/", async (req, res) => {
     res.status(500).json({ error: "서버 오류로 장소를 불러올 수 없습니다." });
   }
 });
+
+// ✅ 저장된 장소 수정 API (별점/메모 등)
+// 저장된 장소 수정 API
+// [PATCH] /places/:id
+router.patch("/:id", async (req, res) => {
+  console.log("[PATCH] id:", req.params.id, "body:", req.body);
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    // hiddenAfterVisited를 true로 켜는 순간 alertEnabled는 반드시 false가 된다.
+    if (updateData?.hiddenAfterVisited === true) {
+      updateData.alertEnabled = false;
+    }
+    const updatedPlace = await Place.findByIdAndUpdate(
+      id,
+      {
+        $set: updateData,
+      },
+      { new: true, runValidators: true } // 수정된 문서 반환
+    );
+
+    if (!updatedPlace) {
+      return res.status(404).json({ error: "장소를 찾을 수 없습니다." });
+    }
+
+    res.json(updatedPlace);
+  } catch (error) {
+    console.error("장소 수정 오류:", error);
+    res.status(500).json({ error: "서버 오류로 장소를 수정할 수 없습니다." });
+  }
+});
+
 // [DELETE] 저장된 장소 삭제
 // DELETE /places/:id
 router.delete("/:id", async (req, res) => {

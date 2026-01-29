@@ -1,0 +1,129 @@
+/* frontend/src/components/BasicInfoModalStyles.module.css */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.modal {
+  background: white;
+  width: 86%;
+  max-width: 420px;
+  padding: 18px;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  position: relative;
+}
+
+.closeBtn {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.savedBadge {
+  display: inline-block;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #e8f1ff;
+  color: #0b63e5;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.ratingRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.ratingLabel {
+  color: #555;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ratingValue {
+  color: #111;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.pickerWrap {
+  margin-top: 6px;
+  position: relative;
+}
+
+.starRow {
+  display: flex;
+  align-items: center;
+}
+
+.stepGrid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 26px;
+  width: 138px; /* 26 * 5 + 간격 */
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+}
+
+.stepBtn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.textarea {
+  width: 100%;
+  height: 86px;
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #d0d0d0;
+  resize: none;
+}
+
+.memoTag {
+  display: flex;
+  width: 50%;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.primaryBtn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  margin-top: 12px;
+  background-color: #007bff;
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.deleteBtn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  margin-top: 10px;
+  background-color: #dc3545;
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}

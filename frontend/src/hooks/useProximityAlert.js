@@ -16,6 +16,7 @@ import { showNotification } from "../utils/notification";
 export default function useProximityAlert({
   currentPosition,
   savedPlaces,
+  notifiedPlaces,
   setNotifiedPlaces,
   radius = 100,
 }) {
@@ -23,6 +24,10 @@ export default function useProximityAlert({
     if (!currentPosition || savedPlaces.length === 0) return;
 
     savedPlaces.forEach((place) => {
+      if (!place.alertEnabled) return;
+      // 이미 알림 보낸 장소면 스킵
+      if (notifiedPlaces.includes(place._id)) return;
+
       const dist = getDistanceFromLatLonInM(
         currentPosition.lat,
         currentPosition.lng,
@@ -31,18 +36,19 @@ export default function useProximityAlert({
       );
 
       if (dist < radius) {
-        setNotifiedPlaces((prev) => {
-          // 이미 알림을 보낸 장소면 아무 것도 하지 않음
-          if (prev.includes(place._id)) return prev;
+        showNotification(
+          `📍 저장된 장소 ${place.name} 근처입니다!`,
+          `${dist.toFixed(1)}m 남음`
+        );
 
-          showNotification(
-            `📍 저장된 장소 ${place.name} 근처입니다!`,
-            `${dist.toFixed(1)}m 남음`
-          );
-
-          return [...prev, place._id];
-        });
+        setNotifiedPlaces((prev) => [...prev, place._id]);
       }
     });
-  }, [currentPosition, savedPlaces, radius, setNotifiedPlaces]);
+  }, [
+    currentPosition,
+    savedPlaces,
+    notifiedPlaces, // ✅ 의존성 명시
+    radius,
+    setNotifiedPlaces,
+  ]);
 }

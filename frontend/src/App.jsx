@@ -1,21 +1,15 @@
 /* =========================================================
- * App.jsx
- * ---------------------------------------------------------
- * 역할:
- * 1. 앱 전체에서 공유되는 state 관리
- * 2. 커스텀 hooks들을 조합하여 비즈니스 로직 구성
- * 3. UI 컴포넌트들을 조립(render)
- *
- * ❌ 직접 계산, API 로직, 지도 SDK 로딩은 하지 않음
+ * frontend/src/App.jsx
  * ========================================================= */
 
-/* ===================== Components ===================== */
-import BasicInfoModal from "./components/BasicInfoModal";
+import PlaceBottomSheet from "./components/bottomSheet/PlaceBottomSheet.jsx";
 import MapContainer from "./components/MapContainer.jsx";
 import SearchBar from "./components/Searchbar.jsx";
 import RecenterButton from "./components/RecenterButton.jsx";
+import SavePlaceSheet from "./components/saveSheet/SavePlaceSheet.jsx";
 
 /* ======================= Hooks ======================== */
+import usePlaceMutations from "./hooks/usePlaceMutations.js";
 import useGeolocation from "./hooks/useGeolocation.js";
 import usePlaceDetails from "./hooks/usePlaceDetails.js";
 import useMapClick from "./hooks/useMapClick.js";
@@ -29,263 +23,327 @@ import GoogleMapsProvider from "./providers/GoogleMapsProvider";
 import { useEffect, useState } from "react";
 
 function App() {
-  /* =====================================================
-   * 1️⃣ STATE 영역
-   * -----------------------------------------------------
-   * - App 전반에서 공유되는 “데이터의 원본(Source of Truth)”
-   * - 하위 컴포넌트들은 이 state를 props로만 전달받음
-   * ===================================================== */
+  /* ======================= STATE ======================= */
 
-  // 이미 알림을 보낸 장소 ID 목록 (중복 알림 방지용)
   const [notifiedPlaces, setNotifiedPlaces] = useState([]);
-
-  // DB에 저장된 모든 장소 리스트
   const [savedPlaces, setSavedPlaces] = useState([]);
-
-  // Google Map 인스턴스 (panTo, addListener 등에 사용)
   const [mapInstance, setMapInstance] = useState(null);
 
-  // Google Places API에서 선택된 장소
-  const [selectedGooglePlace, setSelectedGooglePlace] = useState(null);
-
-  // DB에 저장된 장소 중 선택된 것
-  const [selectedSavedPlace, setSelectedSavedPlace] = useState(null);
-
-  // 장소 선택 출처: "search" | "map" | null
   const [selectedPlaceSource, setSelectedPlaceSource] = useState(null);
-
-  // 현재 선택된 장소의 상세 정보 (모달 표시용)
   const [selectedPlaceInfo, setSelectedPlaceInfo] = useState(null);
 
-  // SearchBar 강제 열림/닫힘 제어용 Key
-  const [searchResetKey, setSearchResetKey] = useState(0);
+  // Bottom Sheet 상태
+  const [sheetState, setSheetState] = useState("hidden");
 
-  // 장소 정보 모달 열림 여부
-  const [modalOpen, setModalOpen] = useState(false);
+  // ✅ center 핵심 제어자: "user" | "place"
+  const [centerOwner, setCenterOwner] = useState("place");
 
+  // 🔥 지도 위치 제어 모드: "idle" | "recentered" | "follow"
+  const [locationMode, setLocationMode] = useState("idle");
+
+  const [activePin, setActivePin] = useState(null);
+  /*
+  activePin = {
+    type: "saved" | "poi" | "user",
+    id?: string,
+    position: { lat, lng },
+    state: "idle" | "highlighted" | "follow" | "alert"
+  }
+  */
+  // SavePlaceSheet 제어
+  const [isSaveSheetOpen, setIsSaveSheetOpen] = useState(false);
   const API_BASE_URL = "http://localhost:3000";
 
-  /* =====================================================
-   * 선택 출처(source)에 따른 UX 분기
-   * ===================================================== */
-  useEffect(() => {
-    const hasSelectedPlace =
-      selectedGooglePlace !== null || selectedSavedPlace !== null;
-
-    if (!hasSelectedPlace || !selectedPlaceSource) return;
-
-    // 🔹 검색에서 선택된 경우
-    if (selectedPlaceSource === "search") {
-      // SearchBar는 내부에서 닫힘
-      // App에서는 별도 동작 없음
-      return;
-    }
-
-    // 🔹 지도에서 선택된 경우
-    if (selectedPlaceSource === "map") {
-      // effect 종료 후 SearchBar 리셋
-      setTimeout(() => {
-        setSearchResetKey((prev) => prev + 1);
-      }, 0);
-      return;
-    }
-  }, [selectedGooglePlace, selectedSavedPlace, selectedPlaceSource]);
-
-  /* =====================================================
-   * 2️⃣ DATA FETCH 영역
-   * -----------------------------------------------------
-   * - “서버에서 가져오는 데이터”
-   * - App이 처음 마운트될 때 1회 실행
-   * ===================================================== */
+  /* ======================= FETCH ======================= */
 
   useEffect(() => {
     const fetchPlaces = async () => {
       try {
-        const res = await fetch("http://localhost:3000/places");
+        const res = await fetch(`${API_BASE_URL}/places`);
         const data = await res.json();
         setSavedPlaces(data);
       } catch (error) {
         console.error("장소 불러오기 실패:", error);
       }
     };
-
     fetchPlaces();
-  }, []);
+  }, [API_BASE_URL]);
 
-  /* =====================================================
-   * 3️⃣ HOOKS 조합 영역
-   * -----------------------------------------------------
-   * - 각각의 hook은 “하나의 책임”만 가짐
-   * - App에서는 이들을 조합해서 전체 동작을 만듦
-   * ===================================================== */
+  /* ======================= HOOKS ======================= */
 
-  // 브라우저 알림 권한 요청 (앱 최초 진입 시)
   useNotificationPermission();
+  const currentPosition = useGeolocation();
 
-  // 현재 사용자 위치 추적 (mapInstance가 준비되면 동작)
-  const currentPosition = useGeolocation(mapInstance);
-
-  // placeId → Place Details 조회 로직
+  /**
+   * 🔥 장소 상세 로딩 성공 시:
+   * - sheetState: partial
+   * - locationMode: idle
+   * - centerOwner: place (장소 탐색으로 간주)
+   */
   const fetchPlaceDetails = usePlaceDetails(
     mapInstance,
-    setSelectedGooglePlace,
-    setSelectedPlaceInfo,
-    setModalOpen
+    () => {},
+    (placeInfo) => {
+      setSelectedPlaceInfo(placeInfo);
+      setSheetState("partial");
+
+      // ✅ 장소 탐색 이벤트는 place가 centerOwner
+      setCenterOwner("place");
+
+      // ✅ 장소 탐색 시 follow 종료/초기화
+      setLocationMode("idle");
+
+      // ✅ POI 강조는 activePin 하나로 통일
+      setActivePin({
+        type: "poi",
+        id: placeInfo.place_id,
+        position: placeInfo.position,
+        state: "highlighted",
+      });
+    }
   );
 
-  // 지도 클릭 시 실행될 핸들러 생성
-  const handleMapClick = useMapClick(fetchPlaceDetails, () => {
-    setSelectedGooglePlace(null);
-    setSelectedSavedPlace(null);
-    setSelectedPlaceSource("map");
-  });
+  const handleMapClick = useMapClick(fetchPlaceDetails, setSelectedPlaceSource);
 
-  // 현재 위치 기준으로 저장된 장소 근접 시 알림
   useProximityAlert({
     currentPosition,
     savedPlaces,
     notifiedPlaces,
     setNotifiedPlaces,
-    radius: 100, // meters
+    radius: 100,
   });
 
-  /* =====================================================
-   * 4️⃣ EVENT / HANDLER 영역
-   * -----------------------------------------------------
-   * - UI에서 발생한 이벤트를 “의미 있는 동작”으로 변환
-   * ===================================================== */
+  /* ======================= MUTATIONS ======================= */
 
-  // 지도 로드 완료 시 map 인스턴스 저장
+  const { createPlace, updatePlace, deletePlace } = usePlaceMutations({
+    API_BASE_URL,
+    setSavedPlaces,
+    setSelectedPlaceInfo,
+    setSheetState,
+  });
+
+  /* ======================= EVENTS ======================= */
+
   const handleOnLoad = (map) => {
+    console.log("[App] Map loaded -> setMapInstance", !!map);
     setMapInstance(map);
   };
 
-  // 검색 결과(Autocomplete)에서 장소 선택 시
   const handlePlaceSelect = (prediction) => {
-    if (!prediction.place_id) return;
+    if (!prediction?.place_id) return;
 
-    setSelectedPlaceSource("search"); // ✅ 출처 기록
-    setSelectedSavedPlace(null); // ✅ 저장된 선택 해제
+    setSelectedPlaceSource("search");
+
+    // ✅ 장소 탐색 이벤트
+    setCenterOwner("place");
+    setLocationMode("idle");
+
+    // ✅ 기존 핀을 잠시 제거(로딩 중 잔존 핀 방지)
+    setActivePin(null);
+
     fetchPlaceDetails(prediction.place_id);
   };
 
-  // 장소 저장 버튼 클릭 시
-  const handleSavePlace = async (placeData) => {
-    try {
-      const res = await fetch("/places", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(placeData),
-      });
-
-      const saved = await res.json();
-      setSavedPlaces((prev) => [...prev, saved]);
-      setModalOpen(false);
-    } catch (error) {
-      console.error("장소 저장 실패:", error);
-    }
-  };
-
   const handleSavedPlaceClick = (place) => {
-    setSelectedSavedPlace(place);
+    setSelectedPlaceSource("saved");
 
-    setSelectedGooglePlace(null); // ❗ 혼합 방지
-    setSelectedPlaceInfo(place);
-    setModalOpen(true);
+    setSelectedPlaceInfo({
+      ...place,
+      type: "saved",
+      memo: place.memo || { text: "", tag: "before" },
+    });
+
+    setSheetState("partial");
+
+    // ✅ 저장 장소 클릭도 "장소 탐색"으로 간주
+    setCenterOwner("place");
+    setLocationMode("idle");
+
+    // ✅ 저장 강조도 activePin 하나로 통일
+    setActivePin({
+      type: "saved",
+      id: place._id,
+      position: place.position,
+      state: "highlighted",
+    });
   };
 
-  const handleDeletePlace = async (placeId) => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/places/${placeId}`, {
-        method: "DELETE",
-      });
+  /* ======================= DERIVED ======================= */
 
-      if (!res.ok) {
-        throw new Error("삭제 요청 실패");
-      }
+  const isSaved = selectedPlaceInfo?.type === "saved";
 
-      // 🔥 프론트 상태 업데이트
-      setSavedPlaces((prev) => prev.filter((place) => place._id !== placeId));
-      setModalOpen(false);
-      setSelectedSavedPlace(null);
-      setSelectedPlaceInfo(null);
-    } catch (error) {
-      console.error("장소 삭제 실패:", error);
-    }
-  };
-
-  /* =====================================================
-   * 4-1️⃣ DERIVED STATE (계산된 상태)
-   * ===================================================== */
-
-  const isSaved =
-    selectedSavedPlace !== null &&
-    selectedPlaceInfo !== null &&
-    selectedSavedPlace._id === selectedPlaceInfo._id;
-
-  /* =====================================================
-   * DERIVED STATE: 지도 이동 전용 좌표
-   * ===================================================== */
-
-  const selectedPlaceForMap = selectedGooglePlace
-    ? {
-        lat: selectedGooglePlace.geometry.location.lat(),
-        lng: selectedGooglePlace.geometry.location.lng(),
-      }
-    : selectedSavedPlace
-    ? {
-        lat: selectedSavedPlace.position.lat,
-        lng: selectedSavedPlace.position.lng,
-      }
-    : null;
-
-  /* =====================================================
-   * 5️⃣ RENDER (컴포넌트 조립)
-   * -----------------------------------------------------
-   * - 여기에는 “무엇을 보여줄지”만 있음
-   * - 로직은 위에서 이미 다 결정됨
-   * ===================================================== */
+  /* ======================= RENDER ======================= */
 
   return (
     <GoogleMapsProvider>
       <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
-        {/* 검색바 */}
         <SearchBar
-          key={searchResetKey} // 강제 리셋용
           onPlaceSelect={handlePlaceSelect}
           currentPosition={currentPosition}
         />
 
-        {/* 지도 */}
         <MapContainer
           currentLocation={currentPosition}
-          selectedPosition={selectedPlaceForMap}
           savedPlaces={savedPlaces}
           onMapLoad={handleOnLoad}
           onMapClick={handleMapClick}
           onSavedPlaceClick={handleSavedPlaceClick}
+          sheetState={sheetState}
+          setSheetState={setSheetState}
+          locationMode={locationMode}
+          setLocationMode={setLocationMode}
+          centerOwner={centerOwner}
+          setCenterOwner={setCenterOwner}
+          activePin={activePin} // ✅ activePin 전달
         />
 
-        {/* 내 위치로 이동 버튼 */}
         <RecenterButton
           mapInstance={mapInstance}
           currentPosition={currentPosition}
+          sheetState={sheetState}
+          locationMode={locationMode}
+          setLocationMode={setLocationMode}
+          setCenterOwner={setCenterOwner}
         />
 
-        {/* 장소 정보 모달 */}
-        {modalOpen && (
-          <BasicInfoModal
-            key={selectedPlaceInfo?._id || selectedPlaceInfo?.place_id}
-            place={selectedPlaceInfo}
-            isSaved={isSaved}
-            onClose={() => {
-              setModalOpen(false);
-              setSelectedPlaceSource(null); // ✅ 초기화
-            }}
-            onSave={handleSavePlace}
-            onDelete={handleDeletePlace}
-          />
-        )}
+        <PlaceBottomSheet
+          key={
+            selectedPlaceInfo?._id ?? selectedPlaceInfo?.place_id ?? "no-place"
+          }
+          place={selectedPlaceInfo}
+          sheetState={sheetState}
+          setSheetState={(state) => {
+            setSheetState(state);
+
+            // ✅ BottomSheet가 열리면: follow 종료  장소 탐색 상태로 복귀
+            if (state !== "hidden") {
+              setCenterOwner("place");
+              setLocationMode("idle");
+            }
+          }}
+          isSaved={isSaved}
+          onOpenSaveSheet={() => {
+            setIsSaveSheetOpen(true);
+            setSheetState("hidden"); // 정보 시트는 내려놓음
+          }}
+          onToggleVisited={async () => {
+            if (!selectedPlaceInfo?._id) return;
+
+            const nextVisited = !selectedPlaceInfo.visited;
+            const patchPayload = {
+              visited: nextVisited,
+              memo: {
+                ...(selectedPlaceInfo.memo ?? {}),
+                tag: nextVisited ? "after" : "before",
+              },
+            };
+
+            // 🔥 방문 완료 시 → 알림 자동 OFF
+            if (nextVisited === true) {
+              patchPayload.alertEnabled = false;
+            }
+
+            const updated = await updatePlace(
+              selectedPlaceInfo._id,
+              patchPayload
+            );
+
+            setSelectedPlaceInfo({ ...updated, type: "saved" });
+          }}
+          onToggleAlert={async () => {
+            // 1️⃣ 이미 저장된 장소
+            if (selectedPlaceInfo?._id) {
+              const updated = await updatePlace(selectedPlaceInfo._id, {
+                alertEnabled: !selectedPlaceInfo.alertEnabled,
+              });
+
+              setSelectedPlaceInfo({ ...updated, type: "saved" });
+              return;
+            }
+
+            // 2️⃣ 비저장 장소 → 자동 저장 & 알림 ON
+            const saved = await createPlace({
+              name: selectedPlaceInfo.name,
+              address: selectedPlaceInfo.address,
+              rating: selectedPlaceInfo.rating,
+              reviews: selectedPlaceInfo.reviews,
+              hours: selectedPlaceInfo.hours,
+              position: selectedPlaceInfo.position,
+              memo: { text: "", tag: "before" },
+              myRating: null,
+              alertEnabled: true,
+            });
+
+            setSelectedPlaceInfo({ ...saved, type: "saved" });
+          }}
+          // ✅ mutations 이후 activePin도 함께 정합성 유지
+          onCreate={async (placePayload) => {
+            const saved = await createPlace(placePayload);
+            if (saved?.position && saved?._id) {
+              setActivePin({
+                type: "saved",
+                id: saved._id,
+                position: saved.position,
+                state: "highlighted",
+              });
+            }
+            return saved;
+          }}
+          onUpdate={async (placeId, payload) => {
+            const updated = await updatePlace(placeId, payload);
+            setSelectedPlaceInfo({
+              ...updated,
+              type: "saved",
+            });
+            return updated;
+          }}
+          onDelete={async (placeId) => {
+            const ok = await deletePlace(placeId);
+            setActivePin(null);
+            return ok;
+          }}
+          onClose={() => {
+            setSheetState("hidden");
+            setActivePin(null); // ✅ 반드시 여기서 초기화
+            setSelectedPlaceInfo(null);
+          }}
+        />
+        <SavePlaceSheet
+          isOpen={isSaveSheetOpen}
+          place={selectedPlaceInfo}
+          isSaved={isSaved}
+          onCreate={createPlace}
+          onUpdate={async (placeId, payload) => {
+            const updated = await updatePlace(placeId, payload);
+            setSelectedPlaceInfo({ ...updated, type: "saved" });
+            return updated;
+          }}
+          onClose={() => {
+            setIsSaveSheetOpen(false);
+
+            // 저장 완료 후 정보 시트는 partial로 복귀
+            setSheetState("partial");
+
+            // pin 상태 유지
+            if (selectedPlaceInfo?.position) {
+              setActivePin({
+                type: "saved",
+                id: selectedPlaceInfo._id,
+                position: selectedPlaceInfo.position,
+                state: "highlighted",
+              });
+            }
+          }}
+          onDelete={async (placeId) => {
+            await deletePlace(placeId);
+
+            // UI 정리
+            setIsSaveSheetOpen(false);
+            setSheetState("hidden");
+            setSelectedPlaceInfo(null);
+            setActivePin(null);
+          }}
+        />
       </div>
     </GoogleMapsProvider>
   );

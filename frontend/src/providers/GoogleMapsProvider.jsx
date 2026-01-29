@@ -2,7 +2,7 @@ import { LoadScript } from "@react-google-maps/api";
 
 // Google Maps SDK에서 사용할 라이브러리 목록
 // places: 장소 검색, Place Details, Autocomplete 등에 필수
-const libraries = ["places"];
+const libraries = ["places", "geometry"];
 
 /**
  * Google Maps SDK를 한 번만 로드하기 위한 Provider
