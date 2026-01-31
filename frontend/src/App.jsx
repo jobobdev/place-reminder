@@ -2,6 +2,8 @@
  * frontend/src/App.jsx
  * ========================================================= */
 
+import { API_BASE_URL } from "./config/api";
+
 import PlaceBottomSheet from "./components/bottomSheet/PlaceBottomSheet.jsx";
 import MapContainer from "./components/MapContainer.jsx";
 import RecenterButton from "./components/RecenterButton.jsx";
@@ -64,7 +66,6 @@ function App() {
   */
   // SavePlaceSheet 제어
   const [isSaveSheetOpen, setIsSaveSheetOpen] = useState(false);
-  const API_BASE_URL = "http://localhost:3000";
 
   /* ======================= FETCH ======================= */
 
@@ -79,7 +80,7 @@ function App() {
       }
     };
     fetchPlaces();
-  }, [API_BASE_URL]);
+  }, []);
 
   /* ======================= HOOKS ======================= */
 
