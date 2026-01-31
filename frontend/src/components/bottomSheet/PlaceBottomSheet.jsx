@@ -48,6 +48,8 @@ export default function PlaceBottomSheet({
     overflow: "hidden",
     display: "flex",
     flexDirection: "column",
+    background: "#fff",
+    color: "#111",
   };
 
   return (

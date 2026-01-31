@@ -210,7 +210,15 @@ function App() {
 
   return (
     <GoogleMapsProvider>
-      <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
+      <div
+        style={{
+          width: "100vw",
+          height: "100dvh",
+          position: "relative",
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
+      >
         <TopControls
           currentPosition={currentPosition}
           onPlaceSelect={handlePlaceSelect}
