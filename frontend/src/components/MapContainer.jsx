@@ -90,7 +90,7 @@ export default function MapContainer({
 
     const center = new window.google.maps.LatLng(
       currentLocation.lat,
-      currentLocation.lng
+      currentLocation.lng,
     );
 
     const heading = currentLocation.heading;
@@ -174,19 +174,22 @@ export default function MapContainer({
     if (locationMode !== "follow") return;
     if (!currentLocation) return;
 
-    // 🔴 heading 미지원 환경
-    if (typeof currentLocation.heading !== "number") {
-      if (!hasShownFollowUnsupportedToastRef.current) {
-        hasShownFollowUnsupportedToastRef.current = true;
-        window.alert("위치 추적 모드는 모바일 환경에서만 지원됩니다.");
-      }
-      return;
-    }
-
+    // ✅ follow의 핵심: heading 없어도 위치 추적(panTo)은 수행
     mapRef.current.panTo(currentLocation);
 
-    mapRef.current.setHeading?.(currentLocation.heading);
-    mapRef.current.setTilt?.(45);
+    // heading이 있을 때만 회전/틸트 적용
+    if (typeof currentLocation.heading === "number") {
+      mapRef.current.setHeading?.(currentLocation.heading);
+      mapRef.current.setTilt?.(45);
+    } else {
+      //(선택) 1회 안내를 남기고 싶다면 '모바일' 같은 단정 문구는 금지
+      if (!hasShownFollowUnsupportedToastRef.current) {
+        hasShownFollowUnsupportedToastRef.current = true;
+        window.alert(
+          "현재 환경에서는 방향(heading) 정보가 제공되지 않아, 지도 회전 없이 위치만 추적합니다.",
+        );
+      }
+    }
   }, [centerOwner, locationMode, currentLocation]);
 
   /* ---------------------------------------------
@@ -388,7 +391,7 @@ export default function MapContainer({
         .filter((place) => !isHiddenAfterVisited(place))
         .filter(
           (place) =>
-            !(activePin?.type === "saved" && activePin?.id === place._id)
+            !(activePin?.type === "saved" && activePin?.id === place._id),
         )
         .map((place) => {
           const isVisited = !!place.visited;
