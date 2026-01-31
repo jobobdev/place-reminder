@@ -7,12 +7,15 @@ export default function SearchResultPanel({
   visibleCount,
   onSelect,
   isMobile,
+  isSearching,
+  isLoading,
   offsetTop = 60, // 검색창 높이
   // 🔽 다음 단계에서 연결할 예정 (지금은 옵션)
   onReachEnd,
 }) {
   // ✅ Hook은 조건 없이 항상 호출되어야 함
   const loadMoreRef = useRef(null);
+  const panelRef = useRef(null);
 
   useEffect(() => {
     // 결과 없으면 observe 불필요하지만,
@@ -39,32 +42,48 @@ export default function SearchResultPanel({
     return () => observer.disconnect();
   }, [results, onReachEnd]);
 
+  useEffect(() => {
+    if (!isSearching || !panelRef.current) return;
+    const rect = panelRef.current.getBoundingClientRect();
+    console.log("[SearchResultPanel] rect", rect);
+  }, [isSearching, results?.length]);
+
   // ✅ Hook 선언 이후에 return null
-  if (!results || results.length === 0) return null;
+  if (!isSearching) return null;
 
   const visibleResults = results.slice(0, visibleCount);
+  const isEmpty = !results || results.length === 0;
 
   return (
     <div
+      ref={panelRef}
       className={`search-result-panel ${isMobile ? "is-mobile" : "is-desktop"}`}
       style={isMobile ? { top: offsetTop } : undefined}
     >
       <div className="search-result-content">
-        {visibleResults.map((item) => (
-          <div
-            key={`${item.place_id}-${item.name}`}
-            className="search-result-item"
-            onClick={() => onSelect(item)}
-          >
-            <div className="search-result-title">{item.name}</div>
-
-            {item.formatted_address && (
-              <div className="search-result-address">
-                {item.formatted_address}
-              </div>
-            )}
+        {isEmpty ? (
+          <div className="search-result-item">
+            <div className="search-result-title">
+              {isLoading ? "검색 중..." : "10km 이내 검색 결과가 없습니다."}
+            </div>
           </div>
-        ))}
+        ) : (
+          visibleResults.map((item) => (
+            <div
+              key={`${item.place_id}-${item.name}`}
+              className="search-result-item"
+              onClick={() => onSelect(item)}
+            >
+              <div className="search-result-title">{item.name}</div>
+
+              {item.formatted_address && (
+                <div className="search-result-address">
+                  {item.formatted_address}
+                </div>
+              )}
+            </div>
+          ))
+        )}
 
         {/* ✅ 무한스크롤 감지용 sentinel (맨 아래) */}
         <div ref={loadMoreRef} className="load-more-sentinel" />

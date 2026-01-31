@@ -4,9 +4,12 @@
 
 import PlaceBottomSheet from "./components/bottomSheet/PlaceBottomSheet.jsx";
 import MapContainer from "./components/MapContainer.jsx";
-import SearchBar from "./components/Searchbar.jsx";
 import RecenterButton from "./components/RecenterButton.jsx";
 import SavePlaceSheet from "./components/saveSheet/SavePlaceSheet.jsx";
+import closeIcon from "./assets/icons/bottomsheet_close_icon.svg";
+import chevronLeftIcon from "./assets/icons/Chevron_left.svg";
+import useSheetDrag from "./components/bottomSheet/useSheetDrag";
+import TopControls from "./components/TopControls.jsx";
 
 /* ======================= Hooks ======================== */
 import usePlaceMutations from "./hooks/usePlaceMutations.js";
@@ -30,6 +33,7 @@ function App() {
   const [mapInstance, setMapInstance] = useState(null);
 
   const [selectedPlaceSource, setSelectedPlaceSource] = useState(null);
+  void selectedPlaceSource;
   const [selectedPlaceInfo, setSelectedPlaceInfo] = useState(null);
 
   // Bottom Sheet 상태
@@ -42,6 +46,14 @@ function App() {
   const [locationMode, setLocationMode] = useState("idle");
 
   const [activePin, setActivePin] = useState(null);
+  const [isMyPageOpen, setIsMyPageOpen] = useState(false);
+  const [myPageView, setMyPageView] = useState("main");
+  const [myPageSheetState, setMyPageSheetState] = useState("hidden");
+  const { dragHeight: myPageDragHeight, handlers: myPageHandlers } =
+    useSheetDrag({
+      sheetState: myPageSheetState,
+      setSheetState: setMyPageSheetState,
+    });
   /*
   activePin = {
     type: "saved" | "poi" | "user",
@@ -100,7 +112,7 @@ function App() {
         position: placeInfo.position,
         state: "highlighted",
       });
-    }
+    },
   );
 
   const handleMapClick = useMapClick(fetchPlaceDetails, setSelectedPlaceSource);
@@ -165,21 +177,44 @@ function App() {
       id: place._id,
       position: place.position,
       state: "highlighted",
+      visited: place.visited ?? false,
+      hiddenAfterVisited: place.hiddenAfterVisited ?? false,
     });
   };
 
   /* ======================= DERIVED ======================= */
 
   const isSaved = selectedPlaceInfo?.type === "saved";
+  const hiddenPlaces = savedPlaces.filter((place) => place.hiddenAfterVisited);
+  const visibleSavedPlaces = savedPlaces.filter(
+    (place) => !place.hiddenAfterVisited,
+  );
+  const shouldHideTopControls =
+    myPageSheetState === "full" || sheetState === "full" || isSaveSheetOpen;
+
+  const closePlaceSheet = () => {
+    setSheetState("hidden");
+    setSelectedPlaceInfo(null);
+    setActivePin(null);
+  };
+
+  const handleOpenMyPage = () => {
+    closePlaceSheet();
+    setMyPageView("main");
+    setIsMyPageOpen(true);
+    setMyPageSheetState("full");
+  };
 
   /* ======================= RENDER ======================= */
 
   return (
     <GoogleMapsProvider>
       <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
-        <SearchBar
-          onPlaceSelect={handlePlaceSelect}
+        <TopControls
           currentPosition={currentPosition}
+          onPlaceSelect={handlePlaceSelect}
+          onOpenMyPage={handleOpenMyPage}
+          shouldHideTopControls={shouldHideTopControls}
         />
 
         <MapContainer
@@ -226,7 +261,7 @@ function App() {
             setIsSaveSheetOpen(true);
             setSheetState("hidden"); // 정보 시트는 내려놓음
           }}
-          onToggleVisited={async () => {
+          onToggleVisited={async (options) => {
             if (!selectedPlaceInfo?._id) return;
 
             const nextVisited = !selectedPlaceInfo.visited;
@@ -240,15 +275,29 @@ function App() {
 
             // 🔥 방문 완료 시 → 알림 자동 OFF
             if (nextVisited === true) {
-              patchPayload.alertEnabled = false;
+              if (options?.keepAlert) {
+                patchPayload.alertEnabled = true;
+              } else {
+                patchPayload.alertEnabled = false;
+              }
             }
 
             const updated = await updatePlace(
               selectedPlaceInfo._id,
-              patchPayload
+              patchPayload,
             );
 
             setSelectedPlaceInfo({ ...updated, type: "saved" });
+            setActivePin((prev) => {
+              if (!prev || prev.type !== "saved" || prev.id !== updated._id) {
+                return prev;
+              }
+              return {
+                ...prev,
+                visited: updated.visited ?? false,
+                hiddenAfterVisited: updated.hiddenAfterVisited ?? false,
+              };
+            });
           }}
           onToggleAlert={async () => {
             // 1️⃣ 이미 저장된 장소
@@ -285,6 +334,8 @@ function App() {
                 id: saved._id,
                 position: saved.position,
                 state: "highlighted",
+                visited: saved.visited ?? false,
+                hiddenAfterVisited: saved.hiddenAfterVisited ?? false,
               });
             }
             return saved;
@@ -294,6 +345,16 @@ function App() {
             setSelectedPlaceInfo({
               ...updated,
               type: "saved",
+            });
+            setActivePin((prev) => {
+              if (!prev || prev.type !== "saved" || prev.id !== updated._id) {
+                return prev;
+              }
+              return {
+                ...prev,
+                visited: updated.visited ?? false,
+                hiddenAfterVisited: updated.hiddenAfterVisited ?? false,
+              };
             });
             return updated;
           }}
@@ -325,13 +386,24 @@ function App() {
             setSheetState("partial");
 
             // pin 상태 유지
-            if (selectedPlaceInfo?.position) {
+            if (
+              selectedPlaceInfo?.position &&
+              !(
+                selectedPlaceInfo?.visited &&
+                selectedPlaceInfo?.hiddenAfterVisited
+              )
+            ) {
               setActivePin({
                 type: "saved",
                 id: selectedPlaceInfo._id,
                 position: selectedPlaceInfo.position,
                 state: "highlighted",
+                visited: selectedPlaceInfo.visited ?? false,
+                hiddenAfterVisited:
+                  selectedPlaceInfo.hiddenAfterVisited ?? false,
               });
+            } else {
+              setActivePin(null);
             }
           }}
           onDelete={async (placeId) => {
@@ -344,9 +416,297 @@ function App() {
             setActivePin(null);
           }}
         />
+        {isMyPageOpen && (
+          <div
+            style={{
+              ...myPageOverlayStyle,
+              height: myPageDragHeight
+                ? `${myPageDragHeight}px`
+                : myPageHeightByState[myPageSheetState],
+            }}
+            {...myPageHandlers}
+          >
+            <div style={myPageHeaderStyle}>
+              {myPageView !== "main" ? (
+                <button
+                  type="button"
+                  style={myPageBackButtonStyle}
+                  onClick={() => {
+                    if (myPageSheetState === "peek") {
+                      setMyPageSheetState("full");
+                      return;
+                    }
+                    setMyPageView("main");
+                  }}
+                >
+                  <img
+                    src={chevronLeftIcon}
+                    alt="back"
+                    width={20}
+                    height={20}
+                  />
+                </button>
+              ) : (
+                <div style={{ width: 24 }} />
+              )}
+              <div style={myPageTitleStyle}>
+                {myPageView === "saved"
+                  ? "저장된 장소"
+                  : myPageView === "hidden"
+                    ? "숨겨진 장소"
+                    : "내 페이지"}
+              </div>
+              <button
+                type="button"
+                style={myPageCloseButtonStyle}
+                onClick={() => {
+                  setIsMyPageOpen(false);
+                  setMyPageView("main");
+                  setMyPageSheetState("hidden");
+                }}
+              >
+                <img src={closeIcon} alt="close" width={32} height={32} />
+              </button>
+            </div>
+
+            <div style={myPageContentStyle}>
+              {myPageView === "main" && (
+                <>
+                  <button
+                    type="button"
+                    style={myPageRowStyle}
+                    onClick={() => setMyPageView("saved")}
+                  >
+                    <span style={myPageRowTitleStyle}>저장된 장소</span>
+                    <span style={myPageCountStyle}>
+                      {visibleSavedPlaces.length}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    style={myPageRowStyle}
+                    onClick={() => setMyPageView("hidden")}
+                  >
+                    <span style={myPageRowTitleStyle}>숨겨진 장소</span>
+                    <span style={myPageCountStyle}>{hiddenPlaces.length}</span>
+                  </button>
+                </>
+              )}
+
+              {myPageView === "saved" && (
+                <div style={myPageListStyle}>
+                  {visibleSavedPlaces.length === 0 && (
+                    <div style={myPageEmptyStyle}>저장된 장소가 없습니다.</div>
+                  )}
+                  {visibleSavedPlaces.map((place) => (
+                    <div
+                      key={place._id}
+                      style={myPageListRowStyle}
+                      onClick={() => {
+                        if (!place?.position) return;
+                        setMyPageSheetState("peek");
+                        setCenterOwner("place");
+                        setLocationMode("idle");
+                        setActivePin({
+                          type: "saved",
+                          id: place._id,
+                          position: place.position,
+                          state: "highlighted",
+                          visited: place.visited ?? false,
+                          hiddenAfterVisited: place.hiddenAfterVisited ?? false,
+                        });
+                      }}
+                    >
+                      <div style={myPageListTextStyle}>
+                        <div style={myPageListTitleStyle}>{place.name}</div>
+                        {place.address && (
+                          <div style={myPageListSubStyle}>{place.address}</div>
+                        )}
+                        {place.memo?.text && (
+                          <div style={myPageListMemoStyle}>
+                            {place.memo.text}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {myPageView === "hidden" && (
+                <div style={myPageListStyle}>
+                  {hiddenPlaces.length === 0 && (
+                    <div style={myPageEmptyStyle}>숨겨진 장소가 없습니다.</div>
+                  )}
+                  {hiddenPlaces.map((place) => (
+                    <div key={place._id} style={myPageListRowStyle}>
+                      <div style={myPageListTextStyle}>
+                        <div style={myPageListTitleStyle}>{place.name}</div>
+                        {place.address && (
+                          <div style={myPageListSubStyle}>{place.address}</div>
+                        )}
+                        {place.memo?.text && (
+                          <div style={myPageListMemoStyle}>
+                            {place.memo.text}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        style={myPageActionButtonStyle}
+                        onClick={async () => {
+                          if (!place._id) return;
+                          await updatePlace(place._id, {
+                            hiddenAfterVisited: false,
+                          });
+                        }}
+                      >
+                        숨김 해제
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </GoogleMapsProvider>
   );
 }
 
 export default App;
+
+const myPageHeightByState = {
+  peek: "120px",
+  partial: "45vh",
+  full: "100vh",
+};
+
+const myPageOverlayStyle = {
+  position: "fixed",
+  left: 0,
+  right: 0,
+  bottom: 0,
+  zIndex: 2000,
+  backgroundColor: "#fff",
+  display: "flex",
+  flexDirection: "column",
+};
+
+const myPageHeaderStyle = {
+  height: 56,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  padding: "0 16px",
+  borderBottom: "1px solid #eee",
+};
+
+const myPageTitleStyle = {
+  fontSize: 16,
+  fontWeight: 700,
+  color: "#222",
+};
+
+const myPageCloseButtonStyle = {
+  padding: 0,
+  border: "none",
+  backgroundColor: "transparent",
+  cursor: "pointer",
+};
+
+const myPageBackButtonStyle = {
+  padding: 0,
+  border: "none",
+  backgroundColor: "transparent",
+  cursor: "pointer",
+};
+
+const myPageContentStyle = {
+  flex: 1,
+  overflowY: "auto",
+  padding: "16px",
+};
+
+const myPageRowStyle = {
+  width: "100%",
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+  padding: "16px",
+  marginBottom: 12,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  backgroundColor: "#fff",
+  cursor: "pointer",
+};
+
+const myPageRowTitleStyle = {
+  fontSize: 15,
+  fontWeight: 600,
+  color: "#222",
+};
+
+const myPageCountStyle = {
+  fontSize: 14,
+  fontWeight: 600,
+  color: "#1a73e8",
+};
+
+const myPageListStyle = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 12,
+};
+
+const myPageListRowStyle = {
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+  padding: "14px",
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 12,
+};
+
+const myPageListTextStyle = {
+  flex: 1,
+  minWidth: 0,
+};
+
+const myPageListTitleStyle = {
+  fontSize: 14,
+  fontWeight: 600,
+  color: "#222",
+  marginBottom: 4,
+};
+
+const myPageListSubStyle = {
+  fontSize: 12,
+  color: "#666",
+};
+
+const myPageListMemoStyle = {
+  fontSize: 12,
+  color: "#8b8b8b",
+  marginTop: 6,
+};
+
+const myPageActionButtonStyle = {
+  height: 24,
+  padding: "0 12px",
+  borderRadius: 999,
+  border: "1px solid #d1d5db",
+  backgroundColor: "#f8fafc",
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+const myPageEmptyStyle = {
+  fontSize: 13,
+  color: "#888",
+  padding: "12px 4px",
+};

@@ -1,4 +1,5 @@
 // frontend/src/components/bottomSheet/PlaceBottomSheet.jsx
+import { useState } from "react";
 import useSheetDrag from "./useSheetDrag";
 
 import visitOffIcon from "@/assets/icons/place_notvisited_icon.svg";
@@ -20,6 +21,7 @@ export default function PlaceBottomSheet({
   onClose,
 }) {
   const { dragHeight, handlers } = useSheetDrag({ sheetState, setSheetState });
+  const [isVisitConfirmOpen, setIsVisitConfirmOpen] = useState(false);
 
   if (!place || sheetState === "hidden") return null;
 
@@ -59,10 +61,16 @@ export default function PlaceBottomSheet({
             <img
               src={place.visited ? visitOnIcon : visitOffIcon}
               alt="visit-toggle"
-              width={24}
-              height={24}
+              width={32}
+              height={32}
               style={{ cursor: "pointer" }}
-              onClick={() => onToggleVisited?.()}
+              onClick={() => {
+                if (!place.visited) {
+                  setIsVisitConfirmOpen(true);
+                  return;
+                }
+                onToggleVisited?.();
+              }}
             />
           )}
 
@@ -70,8 +78,8 @@ export default function PlaceBottomSheet({
           <img
             src={place.alertEnabled ? alertOnIcon : alertOffIcon}
             alt="alert-toggle"
-            width={24}
-            height={24}
+            width={32}
+            height={32}
             style={{ cursor: "pointer" }}
             onClick={() => onToggleAlert?.()}
           />
@@ -80,8 +88,8 @@ export default function PlaceBottomSheet({
           <img
             src={isSaved ? saveOnIcon : saveOffIcon}
             alt="save"
-            width={24}
-            height={24}
+            width={32}
+            height={32}
             style={{ cursor: "pointer" }}
             onClick={() => onOpenSaveSheet?.()}
           />
@@ -90,8 +98,8 @@ export default function PlaceBottomSheet({
           <img
             src={closeIcon}
             alt="close"
-            width={24}
-            height={24}
+            width={32}
+            height={32}
             style={{ cursor: "pointer" }}
             onClick={() => onClose?.()}
           />
@@ -103,6 +111,44 @@ export default function PlaceBottomSheet({
         {sheetState === "partial" && <PartialContent place={place} />}
         {sheetState === "full" && <FullContent place={place} />}
       </div>
+
+      {isVisitConfirmOpen && (
+        <div
+          style={visitConfirmOverlayStyle}
+          onClick={() => setIsVisitConfirmOpen(false)}
+        >
+          <div
+            style={visitConfirmModalStyle}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={visitConfirmTitleStyle}>
+              방문한 장소는 근처 알림이 비활성화됩니다
+            </div>
+            <div style={visitConfirmActionsStyle}>
+              <button
+                type="button"
+                style={visitConfirmSecondaryButtonStyle}
+                onClick={() => {
+                  setIsVisitConfirmOpen(false);
+                  onToggleVisited?.({ keepAlert: true });
+                }}
+              >
+                알림 유지
+              </button>
+              <button
+                type="button"
+                style={visitConfirmPrimaryButtonStyle}
+                onClick={() => {
+                  setIsVisitConfirmOpen(false);
+                  onToggleVisited?.({ keepAlert: false });
+                }}
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -208,7 +254,7 @@ const headerStyle = {
 };
 const titleStyle = {
   fontWeight: 700,
-  fontSize: 16,
+  fontSize: 18,
   lineHeight: 1.3,
   maxWidth: "70%",
   overflow: "hidden",
@@ -223,4 +269,65 @@ const memoPreviewStyle = {
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
+};
+
+const visitConfirmOverlayStyle = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: "rgba(0,0,0,0.35)",
+  zIndex: 110,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "0 24px",
+};
+
+const visitConfirmModalStyle = {
+  width: "100%",
+  maxWidth: 320,
+  backgroundColor: "#fff",
+  borderRadius: 14,
+  padding: "18px 16px 14px",
+  boxShadow: "0 12px 30px rgba(0,0,0,0.2)",
+};
+
+const visitConfirmTitleStyle = {
+  fontSize: 14,
+  fontWeight: 600,
+  color: "#222",
+  textAlign: "center",
+  lineHeight: 1.4,
+};
+
+const visitConfirmActionsStyle = {
+  display: "flex",
+  gap: 8,
+  marginTop: 14,
+};
+
+const visitConfirmPrimaryButtonStyle = {
+  flex: 1,
+  height: 36,
+  borderRadius: 10,
+  border: "none",
+  backgroundColor: "#1a73e8",
+  color: "#fff",
+  fontSize: 13,
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const visitConfirmSecondaryButtonStyle = {
+  flex: 1,
+  height: 36,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  backgroundColor: "#fff",
+  color: "#333",
+  fontSize: 13,
+  fontWeight: 600,
+  cursor: "pointer",
 };

@@ -226,10 +226,17 @@ export default function MapContainer({
   const activeSpec = useMemo(() => {
     if (!activePin?.type) return null;
 
+    const isActiveHidden =
+      activePin?.type === "saved" &&
+      activePin?.visited &&
+      activePin?.hiddenAfterVisited;
+    if (isActiveHidden) return null;
+
     if (activePin.type === "saved") {
       return getPinVariant({
         type: "saved",
         state: activePin.state,
+        visited: !!activePin.visited,
         highlighted: true,
       });
     }
@@ -257,11 +264,30 @@ export default function MapContainer({
     return getPinVariant({
       type: "saved",
       state: "idle",
+      visited: false,
+      highlighted: false,
+    });
+  }, []);
+
+  const savedVisitedIdleSpec = useMemo(() => {
+    return getPinVariant({
+      type: "saved",
+      state: "idle",
+      visited: true,
       highlighted: false,
     });
   }, []);
 
   const savedIdleIcon = buildIconFromSpec(savedIdleSpec);
+  const savedVisitedIdleIcon = buildIconFromSpec(savedVisitedIdleSpec);
+
+  const isHiddenAfterVisited = (place) =>
+    !!(place?.visited && place?.hiddenAfterVisited);
+
+  const isActiveHidden =
+    activePin?.type === "saved" &&
+    activePin?.visited &&
+    activePin?.hiddenAfterVisited;
 
   /* ======================= RENDER ======================= */
 
@@ -359,21 +385,29 @@ export default function MapContainer({
 
       {/* 저장된 장소(일반) */}
       {savedPlaces
+        .filter((place) => !isHiddenAfterVisited(place))
         .filter(
-          (p) => !(activePin?.type === "saved" && activePin?.id === p._id)
+          (place) =>
+            !(activePin?.type === "saved" && activePin?.id === place._id)
         )
-        .map((place) => (
-          <Marker
-            key={place._id}
-            position={place.position}
-            icon={savedIdleIcon}
-            zIndex={savedIdleSpec?.zIndex ?? 1}
-            onClick={() => onSavedPlaceClick(place)}
-          />
-        ))}
+        .map((place) => {
+          const isVisited = !!place.visited;
+          const icon = isVisited ? savedVisitedIdleIcon : savedIdleIcon;
+          const spec = isVisited ? savedVisitedIdleSpec : savedIdleSpec;
+
+          return (
+            <Marker
+              key={place._id}
+              position={place.position}
+              icon={icon}
+              zIndex={spec?.zIndex ?? 1}
+              onClick={() => onSavedPlaceClick(place)}
+            />
+          );
+        })}
 
       {/* activePin (POI 또는 saved) - 딱 1개만 */}
-      {activePin?.position && (
+      {activePin?.position && !isActiveHidden && (
         <Marker
           key={`active-${activePin.type}-${activePin.id ?? "noid"}`}
           position={activePin.position}

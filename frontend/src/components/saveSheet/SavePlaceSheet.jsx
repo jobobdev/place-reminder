@@ -187,27 +187,56 @@ function SavePlaceSheetBody({
             </span>
           </div>
         </section>
-        +{/* 방문 완료 후 지도 숨기기 */}
-        <section style={{ marginTop: 16, opacity: visited ? 1 : 0.4 }}>
-          <div
+        {/* 방문 완료 후 지도 숨기기 */}
+        <section style={{ marginTop: 16, opacity: visited ? 1 : 0.5 }}>
+          <button
+            type="button"
             onClick={() => {
               if (!visited) return;
               setHiddenAfterVisited((v) => !v);
             }}
+            disabled={!visited}
             style={{
-              display: "inline-flex",
+              display: "flex",
               alignItems: "center",
-              gap: 8,
+              justifyContent: "space-between",
+              width: "100%",
+              gap: 12,
+              padding: 0,
+              border: "none",
+              background: "transparent",
               cursor: visited ? "pointer" : "not-allowed",
             }}
           >
-            <span style={{ fontSize: 13 }}>
+            <span style={{ fontSize: 13, color: visited ? "#222" : "#999" }}>
               방문 완료한 장소 지도에서 핀 숨기기
             </span>
-            <div style={{ marginLeft: 8 }}>
-              {hiddenAfterVisited ? "(   O)" : "( O   )"}
-            </div>
-          </div>
+            <span
+              style={{
+                position: "relative",
+                width: 46,
+                height: 28,
+                borderRadius: 999,
+                backgroundColor: hiddenAfterVisited ? "#34C759" : "#E5E5EA",
+                transition: "background-color 0.2s ease",
+                boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.08)",
+              }}
+            >
+              <span
+                style={{
+                  position: "absolute",
+                  top: 2,
+                  left: hiddenAfterVisited ? 22 : 2,
+                  width: 24,
+                  height: 24,
+                  borderRadius: "50%",
+                  backgroundColor: "#fff",
+                  transition: "left 0.2s ease",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                }}
+              />
+            </span>
+          </button>
         </section>
       </div>
 

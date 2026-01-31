@@ -76,37 +76,29 @@ button:focus-visible {
    =============================== */
 .search-overlay {
   position: fixed;
-  inset: 0;
-  background: #ffffff;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #ffffff00;
   z-index: 20;
 }
+
 /* ===============================
    검색 헤더 (검색창 영역)
    - 스크롤되는 리스트 위에 고정
    =============================== */
 .search-header {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-
-  /* 검색창 위/아래 여백 포함한 헤더 높이 */
-  padding: 12px 0;
-  min-height: 64px; /* 실제 검색창 높이와 동일하게 */
-
-  z-index: 40; /* SearchResultPanel, overlay보다 위 */
-  pointer-events: none; /* 헤더 자체는 클릭 막고, 내부만 허용 */
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  z-index: 40;
+  pointer-events: none;
 }
 
-/* 헤더 내부 요소만 클릭 가능 */
 .search-header > * {
   pointer-events: auto;
-}
-
-/* 검색 중일 때 헤더 배경을 불투명으로 */
-.search-header.is-searching {
-  background: #ffffff;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
 }
 
 @media (prefers-color-scheme: light) {

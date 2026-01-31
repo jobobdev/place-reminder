@@ -1,13 +1,13 @@
 // frontend/src/components/map/pinVariants.js
 
-export function getPinVariant({ type, state = "idle" }) {
+export function getPinVariant({ type, state = "idle", visited = false }) {
   switch (type) {
     case "saved": {
       switch (state) {
         case "highlighted":
           return {
-            icon: "saved_highlighted",
-            size: 40,
+            icon: visited ? "saved_visited_highlighted" : "saved_highlighted",
+            size: 42,
             anchor: [20, 34],
             zIndex: 3,
           };
@@ -24,7 +24,7 @@ export function getPinVariant({ type, state = "idle" }) {
         case "idle":
         default:
           return {
-            icon: "saved",
+            icon: visited ? "saved_visited" : "saved",
             size: 28,
             anchor: [14, 28],
             zIndex: 1,

@@ -18,7 +18,7 @@ function BasicInfoModal({
   // ✅ Hooks는 항상 최상단에서 호출 (조건부 return보다 먼저)
   const hours = useMemo(
     () => (Array.isArray(place?.hours) ? place.hours : []),
-    [place]
+    [place],
   );
 
   // 🔹 메모는 text + tag 구조
@@ -26,7 +26,7 @@ function BasicInfoModal({
   const [memoTag, setMemoTag] = useState(place?.memo?.tag || "before");
 
   const [myRating, setMyRating] = useState(
-    place?.myRating === undefined ? null : place.myRating
+    place?.myRating === undefined ? null : place.myRating,
   );
 
   // ✅ place가 바뀔 때 입력값을 "리셋"해야 하면:

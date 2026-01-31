@@ -26,6 +26,8 @@
 import { useState, useRef } from "react";
 import { getDistanceFromLatLonInM } from "../utils/distance";
 import SearchResultPanel from "../components/SearchResultPanel";
+import SearchIcon from "@mui/icons-material/Search";
+
 /*
   💡 이 컴포넌트는 "검색 UX"만 책임진다.
   - 지도 이동 ❌
@@ -48,6 +50,7 @@ function SearchBar({ onPlaceSelect, currentPosition }) {
   const [results, setResults] = useState([]);
   // 화면에 보여줄 결과 개수 / pagination 더보기용
   const [visibleCount, setVisibleCount] = useState(5);
+  const [isLoading, setIsLoading] = useState(false);
 
   // 한 번에 몇 개씩 보여줄지 (상수)
   const PAGE_SIZE = 5;
@@ -82,7 +85,7 @@ function SearchBar({ onPlaceSelect, currentPosition }) {
 
     // PlacesService는 지도 인스턴스가 없어도 사용 가능
     const placesService = new window.google.maps.places.PlacesService(
-      document.createElement("div")
+      document.createElement("div"),
     );
 
     // ✅ [여기가 유일한 개수 제한 위치]
@@ -91,39 +94,56 @@ function SearchBar({ onPlaceSelect, currentPosition }) {
     const limitedPredictions = predictions.slice(0, MAX_DETAIL_CALLS);
 
     const enrichedResults = await Promise.all(
-      limitedPredictions.map(
-        (prediction) =>
-          new Promise((resolve) => {
-            placesService.getDetails(
-              {
-                placeId: prediction.place_id,
-                fields: ["geometry"],
-              },
-              (place, status) => {
-                if (
-                  status !== window.google.maps.places.PlacesServiceStatus.OK
-                ) {
-                  return resolve(null);
-                }
-
-                const lat = place.geometry.location.lat();
-                const lng = place.geometry.location.lng();
-
-                const distance = getDistanceFromLatLonInM(
-                  currentPosition.lat,
-                  currentPosition.lng,
-                  lat,
-                  lng
-                );
-
-                resolve({
-                  ...prediction,
-                  distance,
-                });
-              }
+      limitedPredictions.map((prediction) => {
+        const location = prediction?.geometry?.location;
+        if (location) {
+          const lat =
+            typeof location.lat === "function" ? location.lat() : location.lat;
+          const lng =
+            typeof location.lng === "function" ? location.lng() : location.lng;
+          if (typeof lat === "number" && typeof lng === "number") {
+            const distance = getDistanceFromLatLonInM(
+              currentPosition.lat,
+              currentPosition.lng,
+              lat,
+              lng,
             );
-          })
-      )
+            return Promise.resolve({
+              ...prediction,
+              distance,
+            });
+          }
+        }
+
+        return new Promise((resolve) => {
+          placesService.getDetails(
+            {
+              placeId: prediction.place_id,
+              fields: ["geometry"],
+            },
+            (place, status) => {
+              if (status !== window.google.maps.places.PlacesServiceStatus.OK) {
+                return resolve(null);
+              }
+
+              const lat = place.geometry.location.lat();
+              const lng = place.geometry.location.lng();
+
+              const distance = getDistanceFromLatLonInM(
+                currentPosition.lat,
+                currentPosition.lng,
+                lat,
+                lng,
+              );
+
+              resolve({
+                ...prediction,
+                distance,
+              });
+            },
+          );
+        });
+      }),
     );
 
     console.log(enrichedResults.map((r) => r && Math.round(r.distance)));
@@ -151,8 +171,9 @@ function SearchBar({ onPlaceSelect, currentPosition }) {
     // 🔥 [수정 ①] 검색 종료 조건 (여기가 핵심)
     // - 검색어가 지워지면
     // - 즉시 검색 상태 종료 + 결과 제거
-    if (value.length < 2) {
+    if (value.length < 1) {
       setResults([]); // 결과 패널 제거
+      setIsLoading(false);
       return; // ❗ 여기서 함수 종료
     }
 
@@ -161,6 +182,7 @@ function SearchBar({ onPlaceSelect, currentPosition }) {
     // ===============================
     if (!window.google?.maps?.places) {
       console.warn("Google Maps API not ready yet");
+      setIsLoading(false);
       return;
     }
 
@@ -169,7 +191,7 @@ function SearchBar({ onPlaceSelect, currentPosition }) {
     // ===============================
     if (!placesServiceRef.current) {
       placesServiceRef.current = new window.google.maps.places.PlacesService(
-        document.createElement("div")
+        document.createElement("div"),
       );
     }
 
@@ -184,30 +206,35 @@ function SearchBar({ onPlaceSelect, currentPosition }) {
     if (currentPosition) {
       request.location = new window.google.maps.LatLng(
         currentPosition.lat,
-        currentPosition.lng
+        currentPosition.lng,
       );
     }
 
+    setIsLoading(true);
     placesServiceRef.current.textSearch(request, async (places, status) => {
       console.log("🔍 textSearch status:", status);
       console.log("🔍 textSearch results:", places);
+      console.log("🔍 textSearch count:", places?.length ?? 0);
 
       if (
         status !== window.google.maps.places.PlacesServiceStatus.OK ||
         !places
       ) {
         setResults([]);
+        setIsLoading(false);
         return;
       }
 
       // 🔥 핵심 1: 거리 정보 추가 + 정렬
       const sortedResults = await enrichWithDistance(places);
+      console.log("🔍 filtered count:", sortedResults.length);
 
       // 🔥 핵심 2: 결과 state에 저장
       setResults(sortedResults);
 
       // 🔥 핵심 3: pagination 초기화
       setVisibleCount(PAGE_SIZE);
+      setIsLoading(false);
     });
   };
 
@@ -220,7 +247,7 @@ function SearchBar({ onPlaceSelect, currentPosition }) {
 
     setVisibleCount((prev) => prev + PAGE_SIZE);
   };
-  const isSearching = query.length >= 2;
+  const isSearching = query.length >= 1;
 
   // ==================================================
   // 5️⃣ 렌더링
@@ -237,31 +264,35 @@ function SearchBar({ onPlaceSelect, currentPosition }) {
        ========================================= */}
       {isMobile && isSearching && <div className="search-overlay" />}
       {/* 2) ✅ 헤더 컨테이너: 검색창 + (검색 중) 불투명 배경 */}
-      <div className={`search-header ${isSearching ? "is-searching" : ""}`}>
-        <div style={styles.container}>
-          {isSearching && (
-            <button
-              style={styles.backButton}
-              onClick={() => {
-                setQuery("");
-                setResults([]);
-              }}
-              type="button"
-            >
-              <span className="material-symbols-outlined">chevron_left</span>
-            </button>
-          )}
-
-          <input
-            style={{
-              ...styles.input,
-              paddingLeft: isSearching ? "40px" : "12px",
+      <div
+        className={`search-header ${isSearching ? "is-searching" : "is-not-searhcing"}`}
+      >
+        {isSearching && (
+          <button
+            style={styles.backButton}
+            onClick={() => {
+              setQuery("");
+              setResults([]);
             }}
-            value={query}
-            onChange={handleInput}
-            placeholder="장소를 검색하세요"
-          />
-        </div>
+            type="button"
+          >
+            <span className="material-symbols-outlined">chevron_left</span>
+          </button>
+        )}
+        {isSearching == false && (
+          <div style={styles.searchIcon}>
+            <SearchIcon />
+          </div>
+        )}
+
+        <input
+          style={{
+            ...styles.input,
+          }}
+          value={query}
+          onChange={handleInput}
+          placeholder="장소를 검색하세요"
+        />
       </div>
       {/* 3) 결과 패널 */}
       {isSearching && (
@@ -269,8 +300,10 @@ function SearchBar({ onPlaceSelect, currentPosition }) {
           results={results}
           visibleCount={visibleCount}
           isMobile={isMobile}
+          isSearching={isSearching}
+          isLoading={isLoading}
           onReachEnd={handleReachEnd}
-          offsetTop={64} // ✅ (아래 2)에서 이 값과 CSS 높이를 맞춰야 함
+          offsetTop={0} // ✅ top controls(64) + height(64)
           onSelect={(item) => {
             onPlaceSelect(item);
             setResults([]);
@@ -286,25 +319,37 @@ function SearchBar({ onPlaceSelect, currentPosition }) {
 // 6️⃣ 스타일 (UI 전용)
 // ==================================================
 const styles = {
-  container: {
-    // ✅ [수정] absolute -> fixed
-    position: "fixed",
-    top: "12px",
-    left: "50%",
-    transform: "translateX(-50%)",
-    width: "90%",
-    maxWidth: "420px",
-    zIndex: 30,
-  },
   input: {
     width: "100%",
     boxSizing: "border-box",
-    padding: "12px",
-    borderRadius: "8px",
-    border: "1px solid #ccc",
+    paddingLeft: "40px",
+    paddingRight: "40px",
+    paddingTop: "12px",
+    paddingBottom: "12px",
+    borderRadius: "100px",
+    border: "none",
     fontSize: "16px",
+    boxShadow:
+      "rgba(60, 64, 67, 0.3) 0px 1px 2px 0px, rgba(60, 64, 67, 0.15) 0px 2px 6px 2px",
   },
   backButton: {
+    position: "absolute",
+    left: "12px",
+    top: "50%",
+    transform: "translateY(-50%)",
+    background: "none",
+    border: "none",
+    padding: 0,
+    margin: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    zIndex: 31,
+    color: "#333", // 아이콘 색상
+  },
+
+  searchIcon: {
     position: "absolute",
     left: "12px",
     top: "50%",
