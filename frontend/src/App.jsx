@@ -589,7 +589,7 @@ export default App;
 const myPageHeightByState = {
   peek: "120px",
   partial: "45vh",
-  full: "100vh",
+  full: "100dvh",
 };
 
 const myPageOverlayStyle = {
